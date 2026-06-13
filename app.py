@@ -71,7 +71,7 @@ def proofread_text(text, format_style):
         result_text = response.text
         
         # 【暴力萃取法】找出第一個 '[' 和最後一個 ']' 的位置
-        start_idx = result_text.find('[')fix json parsing
+        start_idx = result_text.find('[')
         end_idx = result_text.rfind(']')
         
         if start_idx != -1 and end_idx != -1:
