@@ -38,8 +38,6 @@ def extract_text(file, file_type):
         st.error(f"檔案讀取失敗：{e}")
     return text
 
-# --- 3. 核心功能：呼叫 AI 進行校對 ---
-# --- 3. 核心功能：呼叫 AI 進行校對 ---
 def proofread_text(text, format_style):
     # 【動態模型尋找機制】不再寫死名稱，直接向 Google 伺服器請求可用清單
     target_model = "gemini-pro" # 給一個最基礎的安全備用值
@@ -70,11 +68,25 @@ def proofread_text(text, format_style):
     
     try:
         response = model.generate_content(prompt)
-        result_text = response.text.strip().replace('```json', '').replace('```', '').strip()
-        return json.loads(result_text)
+        result_text = response.text
+        
+        # 【暴力萃取法】找出第一個 '[' 和最後一個 ']' 的位置
+        start_idx = result_text.find('[')fix json parsing
+        end_idx = result_text.rfind(']')
+        
+        if start_idx != -1 and end_idx != -1:
+            # 只取出括號內部的內容 (包含括號本身)
+            clean_json = result_text[start_idx:end_idx+1]
+            return json.loads(clean_json)
+        else:
+            # 如果連括號都找不到，代表 AI 完全沒按格式回答
+            st.error("AI 未回傳標準的 JSON 格式，請再試一次。")
+            return None
+            
     except Exception as e:
-        st.error(f"AI 校對失敗，API 伺服器回應：{e}")
-        return None# <--- 發生錯誤時回傳 None，而不是空陣列
+        st.error(f"AI 解析資料失敗，錯誤訊息：{e}")
+        return None
+# <--- 發生錯誤時回傳 None，而不是空陣列
 
     # 備註：初期測試先截取前 4000 字，避免運算時間過長或超出 API 限制
     
