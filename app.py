@@ -39,9 +39,23 @@ def extract_text(file, file_type):
     return text
 
 # --- 3. 核心功能：呼叫 AI 進行校對 ---
+# --- 3. 核心功能：呼叫 AI 進行校對 ---
 def proofread_text(text, format_style):
-    # 改用 -latest 確保能抓到對應的模型
-    model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    # 【動態模型尋找機制】不再寫死名稱，直接向 Google 伺服器請求可用清單
+    target_model = "gemini-pro" # 給一個最基礎的安全備用值
+    
+    try:
+        # 遍歷所有可用的模型，尋找支援文字生成的 flash 模型
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                if 'flash' in m.name:
+                    target_model = m.name
+                    break # 找到符合的就立刻跳出迴圈
+    except Exception as e:
+        pass # 若查詢失敗，就沿用備用值
+
+    # 將找到的正確名稱餵給 API
+    model = genai.GenerativeModel(target_model)
     
     prompt = f"""
     你是一位嚴苛的學術期刊編輯。請檢查以下文字的拼寫、文法，以及是否符合【{format_style}】規範。
@@ -60,7 +74,7 @@ def proofread_text(text, format_style):
         return json.loads(result_text)
     except Exception as e:
         st.error(f"AI 校對失敗，API 伺服器回應：{e}")
-        return None  # <--- 發生錯誤時回傳 None，而不是空陣列
+        return None# <--- 發生錯誤時回傳 None，而不是空陣列
 
     # 備註：初期測試先截取前 4000 字，避免運算時間過長或超出 API 限制
     
