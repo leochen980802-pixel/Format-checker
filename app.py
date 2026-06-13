@@ -40,10 +40,9 @@ def extract_text(file, file_type):
 
 # --- 3. 核心功能：呼叫 AI 進行校對 ---
 def proofread_text(text, format_style):
-    # 使用 gemini-1.5-flash，速度最快且免費額度高
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # 改用 -latest 確保能抓到對應的模型
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     
-    # 這是給 AI 的嚴格系統提示詞，強制它回傳結構化的資料 (JSON)
     prompt = f"""
     你是一位嚴苛的學術期刊編輯。請檢查以下文字的拼寫、文法，以及是否符合【{format_style}】規範。
     請務必以 JSON 陣列格式回傳，不要包含任何其他文字或 Markdown 標記，格式如下：
@@ -54,6 +53,15 @@ def proofread_text(text, format_style):
     待校對文字：
     {text[:4000]} 
     """
+    
+    try:
+        response = model.generate_content(prompt)
+        result_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+        return json.loads(result_text)
+    except Exception as e:
+        st.error(f"AI 校對失敗，API 伺服器回應：{e}")
+        return None  # <--- 發生錯誤時回傳 None，而不是空陣列
+
     # 備註：初期測試先截取前 4000 字，避免運算時間過長或超出 API 限制
     
     try:
@@ -94,16 +102,20 @@ if uploaded_file is not None:
             if not raw_text.strip():
                 st.warning("無法從檔案中讀取到文字，請確認檔案內容並非純圖片。")
             else:
-                # 2. 將文字與選擇的格式送給 API
+            # 2. 將文字與選擇的格式送給 API
                 issues = proofread_text(raw_text, format_choice)
                 
-                # 3. 將陣列中的錯誤一條一條列印在畫面上
-                if issues:
+            # 3. 將陣列中的錯誤一條一條列印在畫面上
+            if issues is None:
+                # 如果是 None，代表上面已經印出紅字錯誤了，這裡什麼都不做 (pass)
+                pass
+            elif len(issues) > 0:
                     st.subheader("📝 發現以下格式或錯字問題：")
                     for idx, item in enumerate(issues):
                         with st.expander(f"問題 {idx + 1}：{item.get('issue', '格式問題')}"):
                             st.write("**原文：**", item.get("original", ""))
                             st.write("**建議修改：**", item.get("fix", ""))
-                else:
-                    st.success("太棒了！沒有發現明顯的格式錯誤或錯字。")
+            else:
+                    # 只有真正回傳了空陣列 []，才代表完全沒錯字
+                    st.success("太棒了！AI 沒有發現明顯的格式錯誤或錯字。")
 
