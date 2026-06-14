@@ -40,21 +40,15 @@ def extract_text(file, file_type):
 
 # --- 3. 核心功能：呼叫 AI 進行校對 ---
 def proofread_text(text, format_style):
-    # 【升級 1：改用 Pro 模型】處理複雜邏輯與細節的精準度遠高於 Flash
-    target_model = "gemini-1.5-pro-latest" 
+    # 【精準鎖定模型】直接指定 1.5-pro，避免系統誤抓到免費額度為 0 的 2.5-pro
+    target_model = "gemini-1.5-pro" 
     
     try:
-        # 動態尋找可用的 Pro 模型
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                if 'pro' in m.name:
-                    target_model = m.name
-                    break
+        model = genai.GenerativeModel(target_model)
     except Exception as e:
-        pass
+        st.error(f"模型載入失敗：{e}")
+        return None
 
-    model = genai.GenerativeModel(target_model)
-    
     # 【升級 2：強化提示詞】賦予專家身分、明確的檢查步驟與極度嚴格的語氣
     prompt = f"""
     你現在是一位擁有 20 年經驗的嚴苛學術期刊主編。你的任務是進行極度精準的文字與格式校對。
@@ -71,6 +65,9 @@ def proofread_text(text, format_style):
     待校對文字：
     {text[:4000]} 
     """
+    
+    # ... (下方的 try...except 區塊保持不變) ...
+
     
     try:
         # 【升級 3：鎖死 Temperature】將隨機性降到 0.0，確保每次輸出一致且具最高邏輯性
