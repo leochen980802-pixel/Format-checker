@@ -40,16 +40,26 @@ def extract_text(file, file_type):
 
 # --- 3. 核心功能：呼叫 AI 進行校對 ---
 def proofread_text(text, format_style):
-    # 【精準鎖定模型】直接指定 1.5-pro，避免系統誤抓到免費額度為 0 的 2.5-pro
-    target_model = "gemini-1.5-pro" 
+    # 給一個絕對安全的預設值
+    target_model = "gemini-1.5-pro-latest" 
     
+    try:
+        # 【聰明的動態尋找】找 pro 模型，但避開會報錯的 2.5 版本
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                if 'pro' in m.name and '2.5' not in m.name:
+                    target_model = m.name
+                    break # 找到 1.5 系列的 pro 就立刻鎖定
+    except Exception as e:
+        pass # 若查詢失敗，就沿用預設值
+
     try:
         model = genai.GenerativeModel(target_model)
     except Exception as e:
         st.error(f"模型載入失敗：{e}")
         return None
 
-    # 【升級 2：強化提示詞】賦予專家身分、明確的檢查步驟與極度嚴格的語氣
+    # 【強化提示詞】賦予專家身分、明確的檢查步驟與極度嚴格的語氣
     prompt = f"""
     你現在是一位擁有 20 年經驗的嚴苛學術期刊主編。你的任務是進行極度精準的文字與格式校對。
     請嚴格執行以下步驟：
@@ -65,9 +75,6 @@ def proofread_text(text, format_style):
     待校對文字：
     {text[:4000]} 
     """
-    
-    # ... (下方的 try...except 區塊保持不變) ...
-
     
     try:
         # 【升級 3：鎖死 Temperature】將隨機性降到 0.0，確保每次輸出一致且具最高邏輯性
