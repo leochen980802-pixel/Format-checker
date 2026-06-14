@@ -40,18 +40,18 @@ def extract_text(file, file_type):
 
 # --- 3. 核心功能：呼叫 AI 進行校對 ---
 def proofread_text(text, format_style):
-    # 給一個絕對安全的預設值
-    target_model = "gemini-1.5-pro-latest" 
+    # 【策略調整】退回 Flash 模型以獲得每分鐘 15 次的扣打，適合頻繁除錯測試
+    target_model = "gemini-1.5-flash" 
     
     try:
-        # 【聰明的動態尋找】找 pro 模型，但避開會報錯的 2.5 版本
+        # 動態尋找 Flash 模型
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
-                if 'pro' in m.name and '2.5' not in m.name:
+                if 'flash' in m.name:
                     target_model = m.name
-                    break # 找到 1.5 系列的 pro 就立刻鎖定
-    except Exception as e:
-        pass # 若查詢失敗，就沿用預設值
+                    break
+    except Exception:
+        pass 
 
     try:
         model = genai.GenerativeModel(target_model)
@@ -59,7 +59,7 @@ def proofread_text(text, format_style):
         st.error(f"模型載入失敗：{e}")
         return None
 
-    # 【強化提示詞】賦予專家身分、明確的檢查步驟與極度嚴格的語氣
+    # 提示詞保持不變（維持專家身分與嚴格度）
     prompt = f"""
     你現在是一位擁有 20 年經驗的嚴苛學術期刊主編。你的任務是進行極度精準的文字與格式校對。
     請嚴格執行以下步驟：
@@ -77,14 +77,14 @@ def proofread_text(text, format_style):
     """
     
     try:
-        # 【升級 3：鎖死 Temperature】將隨機性降到 0.0，確保每次輸出一致且具最高邏輯性
+        # 溫度同樣維持 0.0，讓 Flash 也能像機器一樣精準執行
         response = model.generate_content(
             prompt,
             generation_config={"temperature": 0.0}
         )
         result_text = response.text
         
-        # 暴力萃取法 (保持不變，確保系統不崩潰)
+        # 暴力萃取法
         start_idx = result_text.find('[')
         end_idx = result_text.rfind(']')
         
@@ -96,20 +96,14 @@ def proofread_text(text, format_style):
             return None
             
     except Exception as e:
-        st.error(f"AI 解析資料失敗，錯誤訊息：{e}")
+        # 【優化錯誤捕捉】如果是 429，給予白話文提示而不是滿江紅
+        error_msg = str(e)
+        if "429" in error_msg or "Quota" in error_msg:
+             st.warning("⚠️ 呼叫太頻繁啦！免費版 API 有頻率限制，請等待約 1 分鐘後再點擊測試。")
+        else:
+             st.error(f"AI 解析資料失敗，錯誤訊息：{error_msg}")
         return None
 
-
-    # 備註：初期測試先截取前 4000 字，避免運算時間過長或超出 API 限制
-    
-    try:
-        response = model.generate_content(prompt)
-        # 清理 AI 可能產生的 Markdown 標籤，確保 JSON 格式正確
-        result_text = response.text.strip().replace('```json', '').replace('```', '').strip()
-        return json.loads(result_text)
-    except Exception as e:
-        st.error(f"AI 校對失敗，請檢查文字內容或稍後再試：{e}")
-        return []
 
 # --- 4. 介面與互動邏輯 ---
 st.title("📄 學術格式與錯字校對工具")
