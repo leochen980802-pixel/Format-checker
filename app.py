@@ -38,28 +38,34 @@ def extract_text(file, file_type):
         st.error(f"檔案讀取失敗：{e}")
     return text
 
+# --- 3. 核心功能：呼叫 AI 進行校對 ---
 def proofread_text(text, format_style):
-    # 【動態模型尋找機制】不再寫死名稱，直接向 Google 伺服器請求可用清單
-    target_model = "gemini-pro" # 給一個最基礎的安全備用值
+    # 【升級 1：改用 Pro 模型】處理複雜邏輯與細節的精準度遠高於 Flash
+    target_model = "gemini-1.5-pro-latest" 
     
     try:
-        # 遍歷所有可用的模型，尋找支援文字生成的 flash 模型
+        # 動態尋找可用的 Pro 模型
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
-                if 'flash' in m.name:
+                if 'pro' in m.name:
                     target_model = m.name
-                    break # 找到符合的就立刻跳出迴圈
+                    break
     except Exception as e:
-        pass # 若查詢失敗，就沿用備用值
+        pass
 
-    # 將找到的正確名稱餵給 API
     model = genai.GenerativeModel(target_model)
     
+    # 【升級 2：強化提示詞】賦予專家身分、明確的檢查步驟與極度嚴格的語氣
     prompt = f"""
-    你是一位嚴苛的學術期刊編輯。請檢查以下文字的拼寫、文法，以及是否符合【{format_style}】規範。
-    請務必以 JSON 陣列格式回傳，不要包含任何其他文字或 Markdown 標記，格式如下：
+    你現在是一位擁有 20 年經驗的嚴苛學術期刊主編。你的任務是進行極度精準的文字與格式校對。
+    請嚴格執行以下步驟：
+    1. 逐字掃描，找出「所有」錯別字、漏字與不通順的文法。
+    2. 嚴格檢查格式是否「完全」符合【{format_style}】規範（包含引註格式、標點符號全半形、大小寫等）。
+    3. 寧可嚴格，不可錯漏。必須抓出所有問題。
+
+    請務必以 JSON 陣列格式回傳，絕對不要包含任何其他文字、問候語或 Markdown 標記，格式嚴格如下：
     [
-      {{"original": "錯誤的句子", "issue": "錯誤原因說明", "fix": "建議修改內容"}}
+      {{"original": "錯誤的句子或單字", "issue": "具體的錯誤原因說明", "fix": "建議的精確修改內容"}}
     ]
     
     待校對文字：
@@ -67,26 +73,28 @@ def proofread_text(text, format_style):
     """
     
     try:
-        response = model.generate_content(prompt)
+        # 【升級 3：鎖死 Temperature】將隨機性降到 0.0，確保每次輸出一致且具最高邏輯性
+        response = model.generate_content(
+            prompt,
+            generation_config={"temperature": 0.0}
+        )
         result_text = response.text
         
-        # 【暴力萃取法】找出第一個 '[' 和最後一個 ']' 的位置
+        # 暴力萃取法 (保持不變，確保系統不崩潰)
         start_idx = result_text.find('[')
         end_idx = result_text.rfind(']')
         
         if start_idx != -1 and end_idx != -1:
-            # 只取出括號內部的內容 (包含括號本身)
             clean_json = result_text[start_idx:end_idx+1]
             return json.loads(clean_json)
         else:
-            # 如果連括號都找不到，代表 AI 完全沒按格式回答
             st.error("AI 未回傳標準的 JSON 格式，請再試一次。")
             return None
             
     except Exception as e:
         st.error(f"AI 解析資料失敗，錯誤訊息：{e}")
         return None
-# <--- 發生錯誤時回傳 None，而不是空陣列
+
 
     # 備註：初期測試先截取前 4000 字，避免運算時間過長或超出 API 限制
     
