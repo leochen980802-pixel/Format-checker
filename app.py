@@ -21,7 +21,7 @@ else:
     st.sidebar.warning("🔑 未偵測到系統環境金鑰，請確保您已配置 GEMINI_API_KEY")
 
 # ==========================================
-# 1. 歷史紀錄系統檔案儲存邏輯 (請確保內部有正確縮排)
+# 1. 歷史紀錄系統檔案儲存邏輯 (嚴格縮排防呆)
 # ==========================================
 HISTORY_FILE = "proofread_history.json"
 
@@ -42,27 +42,39 @@ def save_history(file_name, results):
         "file_name": file_name,
         "results": results
     }
-    # 💡 這裡必須縮排！代表它們屬於 save_history 函數的一部分
     history.insert(0, new_record) 
     
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=4)
 
 # ==========================================
-# 2. 多格式檔案文字萃取器 (支援 TXT / PDF / PPTX)
+# 2. 多格式檔案文字萃取器 (完美對應你的 PyMuPDF)
 # ==========================================
 def extract_text_from_file(file):
     filename = file.name.lower()
+    
+    # 處理純文字檔
     if filename.endswith('.txt'):
         return file.getvalue().decode("utf-8", errors="ignore")
+        
+    # 處理 PDF 檔 (對應你 requirements.txt 中的 PyMuPDF)
     elif filename.endswith('.pdf'):
         try:
-            import pypdf
-            reader = pypdf.PdfReader(file)
-            return "".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            import fitz  # PyMuPDF 的官方內引導模組名稱
+            # 讀取 Streamlit 的檔案緩衝區
+            doc = fitz.open(stream=file.getvalue(), filetype="pdf")
+            text_runs = []
+            for page in doc:
+                text_runs.append(page.get_text())
+            return "".join(text_runs)
         except ImportError:
-            st.error("🚨 系統未安裝 pypdf 套件。請在終端機執行 `pip install pypdf`")
+            st.error("🚨 系統未正確載入 PyMuPDF 套件，請確認雲端部署狀態。")
             return ""
+        except Exception as e:
+            st.error(f"🚨 PDF 解析發生未知錯誤：{e}")
+            return ""
+            
+    # 處理 PPTX 簡報檔
     elif filename.endswith('.pptx'):
         try:
             from pptx import Presentation
@@ -74,15 +86,15 @@ def extract_text_from_file(file):
                         text_runs.append(shape.text)
             return "\n".join(text_runs)
         except ImportError:
-            st.error("🚨 系統未安裝 python-pptx 套件。請在終端機執行 `pip install python-pptx`")
+            st.error("🚨 系統未安裝 python-pptx 套件。")
             return ""
+            
     return ""
 
 # ==========================================
 # 3. AI 核心校對大腦 (分段滑動視窗 + 原生 JSON)
 # ==========================================
 def proofread_text(text, format_style):
-    # 💡 修正為最穩定的 flash 模型，避免 404 與 429 錯誤
     target_model = "gemini-1.5-flash" 
     try:
         model = genai.GenerativeModel(target_model)
@@ -105,11 +117,12 @@ def proofread_text(text, format_style):
         請嚴格執行以下步驟：
         1. 逐字掃描，找出「所有」錯別字、漏字與不通順的文法。
         2. 嚴格檢查格式是否「完全」符合【{format_style}】規範（包含引註格式、標點符號全半形、大小寫等）。
-        
+
         你必須嚴格回傳一個 JSON 陣列，格式如下：
         [
           {{"original": "錯誤的句子或單字", "issue": "具體的錯誤原因說明", "fix": "建議的精確修改內容"}}
         ]
+        
         待校對文字段落：
         {chunk} 
         """
@@ -122,6 +135,7 @@ def proofread_text(text, format_style):
                     "response_mime_type": "application/json"
                 }
             )
+            
             chunk_result = json.loads(response.text)
             if isinstance(chunk_result, list):
                 all_results.extend(chunk_result)
@@ -185,15 +199,22 @@ if st.session_state.selected_history:
         st.warning(f"💡 問題：{item.get('issue', '')}")
         st.success(f"✅ 建議：{item.get('fix', '')}")
         st.markdown("---")
-    st.stop() 
+        
+    st.stop()
 
 # ==========================================
-# 5. 主要運作 UI 介面
+# 5. 主要運作 UI 介面 (格式選擇永遠置頂可選)
 # ==========================================
 st.title("📝 高規格論文/簡報 AI 完美校對工具")
 st.write("支援上傳 `.txt`, `.pdf`, `.pptx` 格式檔案。系統將採用滑動視窗進行無死角逐字審查。")
 
-uploaded_file = st.file_uploader("請上傳您的簡報或文稿檔案", type=["txt", "pdf", "pptx"])
+# 💡 修正：將格式選擇移到最外層，不管有沒有傳檔案都能直接選！
+format_style = st.selectbox(
+    "1️⃣ 請選擇您要遵循的學術/排版格式規範：", 
+    ["APA 格式規範", "Chicago 格式規範", "MLA 格式規範", "通用商業精準簡報規範"]
+)
+
+uploaded_file = st.file_uploader("2️⃣ 請上傳您的簡報或文稿檔案", type=["txt", "pdf", "pptx"])
 
 if uploaded_file is not None:
     with st.spinner("正在解析檔案內的所有文字內容..."):
@@ -204,12 +225,7 @@ if uploaded_file is not None:
     else:
         st.success(f"成功載入檔案！總字數約為 {len(extracted_text)} 字。")
         
-        format_style = st.selectbox(
-            "請選擇您要遵循的學術/排版格式規範：", 
-            ["APA 格式規範", "Chicago 格式規範", "MLA 格式規範", "通用商業精準簡報規範"]
-        )
-        
-        if st.button("🚀 開始全自動分段深度校對"):
+        if st.button("🚀 3️⃣ 開始全自動分段深度校對"):
             all_results = proofread_text(extracted_text, format_style)
             
             if all_results:
