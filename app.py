@@ -21,7 +21,7 @@ else:
     st.sidebar.warning("🔑 未偵測到系統環境金鑰，請確保您已配置 GEMINI_API_KEY")
 
 # ==========================================
-# 1. 歷史紀錄系統檔案儲存邏輯 (嚴格縮排防呆)
+# 1. 歷史紀錄系統檔案儲存邏輯
 # ==========================================
 HISTORY_FILE = "proofread_history.json"
 
@@ -48,20 +48,17 @@ def save_history(file_name, results):
         json.dump(history, f, ensure_ascii=False, indent=4)
 
 # ==========================================
-# 2. 多格式檔案文字萃取器 (完美對應你的 PyMuPDF)
+# 2. 多格式檔案文字萃取器 (對應 PyMuPDF)
 # ==========================================
 def extract_text_from_file(file):
     filename = file.name.lower()
     
-    # 處理純文字檔
     if filename.endswith('.txt'):
         return file.getvalue().decode("utf-8", errors="ignore")
         
-    # 處理 PDF 檔 (對應你 requirements.txt 中的 PyMuPDF)
     elif filename.endswith('.pdf'):
         try:
-            import fitz  # PyMuPDF 的官方內引導模組名稱
-            # 讀取 Streamlit 的檔案緩衝區
+            import fitz  # PyMuPDF
             doc = fitz.open(stream=file.getvalue(), filetype="pdf")
             text_runs = []
             for page in doc:
@@ -74,7 +71,6 @@ def extract_text_from_file(file):
             st.error(f"🚨 PDF 解析發生未知錯誤：{e}")
             return ""
             
-    # 處理 PPTX 簡報檔
     elif filename.endswith('.pptx'):
         try:
             from pptx import Presentation
@@ -95,7 +91,8 @@ def extract_text_from_file(file):
 # 3. AI 核心校對大腦 (分段滑動視窗 + 原生 JSON)
 # ==========================================
 def proofread_text(text, format_style):
-    target_model = "gemini-1.5-flash" 
+    # 💡 升級為 2026 年最新穩定版 flash 模型，解決 404 問題
+    target_model = "gemini-2.5-flash" 
     try:
         model = genai.GenerativeModel(target_model)
     except Exception as e:
@@ -203,12 +200,11 @@ if st.session_state.selected_history:
     st.stop()
 
 # ==========================================
-# 5. 主要運作 UI 介面 (格式選擇永遠置頂可選)
+# 5. 主要運作 UI 介面
 # ==========================================
 st.title("📝 高規格論文/簡報 AI 完美校對工具")
 st.write("支援上傳 `.txt`, `.pdf`, `.pptx` 格式檔案。系統將採用滑動視窗進行無死角逐字審查。")
 
-# 💡 修正：將格式選擇移到最外層，不管有沒有傳檔案都能直接選！
 format_style = st.selectbox(
     "1️⃣ 請選擇您要遵循的學術/排版格式規範：", 
     ["APA 格式規範", "Chicago 格式規範", "MLA 格式規範", "通用商業精準簡報規範"]
