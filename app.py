@@ -48,7 +48,7 @@ def save_history(file_name, results):
         json.dump(history, f, ensure_ascii=False, indent=4)
 
 # ==========================================
-# 2. 多格式檔案文字萃取器 (對應 PyMuPDF)
+# 2. 多格式檔案文字萃取器
 # ==========================================
 def extract_text_from_file(file):
     filename = file.name.lower()
@@ -58,7 +58,7 @@ def extract_text_from_file(file):
         
     elif filename.endswith('.pdf'):
         try:
-            import fitz  # PyMuPDF
+            import fitz  # 呼叫 PyMuPDF
             doc = fitz.open(stream=file.getvalue(), filetype="pdf")
             text_runs = []
             for page in doc:
@@ -88,11 +88,11 @@ def extract_text_from_file(file):
     return ""
 
 # ==========================================
-# 3. AI 核心校對大腦 (分段滑動視窗 + 原生 JSON)
+# 3. AI 核心校對大腦 (退回經典 gemini-pro 模型)
 # ==========================================
 def proofread_text(text, format_style):
-    # 💡 升級為 2026 年最新穩定版 flash 模型，解決 404 問題
-    target_model = "gemini-2.5-flash" 
+    # 💡 使用最通用的經典模型
+    target_model = "gemini-pro" 
     try:
         model = genai.GenerativeModel(target_model)
     except Exception as e:
@@ -110,44 +110,47 @@ def proofread_text(text, format_style):
         status_text.text(f"正在進行深度校對：第 {idx+1} / {len(text_chunks)} 段文字段落...")
         
         prompt = f"""
-        你現在是一位擁有 20 年經驗的嚴苛學術期刊主編。你的任務是進行極度精準的文字與格式校對。
-        請嚴格執行以下步驟：
-        1. 逐字掃描，找出「所有」錯別字、漏字與不通順的文法。
-        2. 嚴格檢查格式是否「完全」符合【{format_style}】規範（包含引註格式、標點符號全半形、大小寫等）。
+        你現在是一位擁有 20 年經驗的嚴苛學術期刊主編。請進行精準的文字與格式校對。
+        1. 找出所有錯別字、漏字與不通順的文法。
+        2. 檢查格式是否符合【{format_style}】規範。
 
-        你必須嚴格回傳一個 JSON 陣列，格式如下：
+        請「絕對嚴格」只回傳一個 JSON 陣列，不要加入任何其他解說文字。格式如下：
         [
-          {{"original": "錯誤的句子或單字", "issue": "具體的錯誤原因說明", "fix": "建議的精確修改內容"}}
+          {{"original": "錯誤的句子", "issue": "錯誤原因說明", "fix": "建議修改內容"}}
         ]
         
-        待校對文字段落：
+        待校對文字：
         {chunk} 
         """
         
         try:
-            response = model.generate_content(
-                prompt,
-                generation_config={
-                    "temperature": 0.0,
-                    "response_mime_type": "application/json"
-                }
-            )
+            # 移除新版參數，使用經典的純文字呼叫方式
+            response = model.generate_content(prompt, generation_config={"temperature": 0.0})
             
-            chunk_result = json.loads(response.text)
+            # 處理 AI 可能會吐出 Markdown 標記 (```json ... ```) 的防呆機制
+            raw_text = response.text.strip()
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:-3].strip()
+            elif raw_text.startswith("```"):
+                raw_text = raw_text[3:-3].strip()
+                
+            chunk_result = json.loads(raw_text)
             if isinstance(chunk_result, list):
                 all_results.extend(chunk_result)
                 
         except Exception as e:
             error_msg = str(e)
             if "429" in error_msg or "Quota" in error_msg:
-                status_text.text("⚠️ 觸發免費版頻率限制，系統自動等待 30 秒後繼續...")
+                status_text.text("⚠️ 觸發頻率限制，等待 30 秒後繼續...")
                 time.sleep(30)
                 try:
-                    response = model.generate_content(
-                        prompt, 
-                        generation_config={"temperature": 0.0, "response_mime_type": "application/json"}
-                    )
-                    chunk_result = json.loads(response.text)
+                    response = model.generate_content(prompt, generation_config={"temperature": 0.0})
+                    raw_text = response.text.strip()
+                    if raw_text.startswith("```json"):
+                        raw_text = raw_text[7:-3].strip()
+                    elif raw_text.startswith("```"):
+                        raw_text = raw_text[3:-3].strip()
+                    chunk_result = json.loads(raw_text)
                     if isinstance(chunk_result, list):
                         all_results.extend(chunk_result)
                 except Exception:
@@ -202,7 +205,7 @@ if st.session_state.selected_history:
 # ==========================================
 # 5. 主要運作 UI 介面
 # ==========================================
-st.title("📝 高規格論文/簡報 AI 完美校對工具")
+st.title("📝 論文/簡報 AI 格式校對工具")
 st.write("支援上傳 `.txt`, `.pdf`, `.pptx` 格式檔案。系統將採用滑動視窗進行無死角逐字審查。")
 
 format_style = st.selectbox(
