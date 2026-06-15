@@ -142,7 +142,7 @@ def proofread_text(text, format_style):
 
 
 # --- 4. 介面與互動邏輯 ---
-st.title("📄 學術格式與錯字校對神器")
+st.title("📄 學術格式與錯字校對工具")
 st.markdown("上傳你的 Word, PDF 或 PPT，AI 將自動抓出格式瑕疵與錯字。")
 
 st.sidebar.header("設定")
