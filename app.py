@@ -208,7 +208,6 @@ if st.session_state.selected_history:
     progress_bar.empty()
     status_text.empty()
     
-    return all_results
 
 #def proofread_text(text, format_style):
     # 【策略調整】退回 Flash 模型以獲得每分鐘 15 次的扣打，適合頻繁除錯測試
@@ -228,7 +227,6 @@ if st.session_state.selected_history:
         model = genai.GenerativeModel(target_model)
     except Exception as e:
         st.error(f"模型載入失敗：{e}")
-        return None
 
     # 提示詞保持不變（維持專家身分與嚴格度）
     prompt = f"""
@@ -261,10 +259,8 @@ if st.session_state.selected_history:
         
         if start_idx != -1 and end_idx != -1:
             clean_json = result_text[start_idx:end_idx+1]
-            return json.loads(clean_json)
         else:
             st.error("AI 未回傳標準的 JSON 格式，請再試一次。")
-            return None
             
     except Exception as e:
         # 【優化錯誤捕捉】如果是 429，給予白話文提示而不是滿江紅
@@ -273,7 +269,6 @@ if st.session_state.selected_history:
              st.warning("⚠️ 呼叫太頻繁啦！免費版 API 有頻率限制，請等待約 1 分鐘後再點擊測試。")
         else:
              st.error(f"AI 解析資料失敗，錯誤訊息：{error_msg}")
-        return None
 
 
 # --- 4. 介面與互動邏輯 ---
