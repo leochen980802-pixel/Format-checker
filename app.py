@@ -5,6 +5,41 @@ import fitz  # PyMuPDF
 from pptx import Presentation
 import json
 
+import json
+import os
+from datetime import datetime
+import streamlit as st
+# (確保你原本的 import genai, time 等等都在)
+
+# 定義儲存歷史紀錄的檔案名稱
+HISTORY_FILE = "proofread_history.json"
+
+# --- 讀取歷史紀錄 ---
+def load_history():
+    if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+                try:
+                                        return json.load(f)
+                except json.JSONDecodeError:
+                    return [] # 如果檔案損壞，回傳空陣列
+                    return []
+
+# --- 寫入歷史紀錄 ---
+                    def save_history(file_name, results):
+                        history = load_history()
+                        new_record = {
+                        "id": datetime.now().strftime("%Y%m%d%H%M%S"), # 產生唯一 ID
+                        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "file_name": file_name,
+                        "results": results
+                        }
+# 把最新的紀錄加到陣列最前面
+history.insert(0, new_record) 
+                                                                                                                                
+with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+                                                                                                                                            json.dump(history, f, ensure_ascii=False, indent=4)
+
+
 # --- 1. 設定與初始化 ---
 st.set_page_config(page_title="學術格式校對 AI", layout="centered")
 
@@ -54,6 +89,42 @@ def proofread_text(text, format_style):
                     break
     except Exception:
         pass 
+
+# --- 側邊欄：歷史紀錄區塊 ---
+st.sidebar.title("🗂️ 校對歷史紀錄")
+history_data = load_history()
+
+# 使用 Session State 來追蹤使用者目前想看哪一筆歷史紀錄
+if "selected_history" not in st.session_state:
+    st.session_state.selected_history = None
+
+if not history_data:
+    st.sidebar.info("目前還沒有任何校對紀錄。")
+else:
+    for record in history_data:
+        # 在側邊欄為每一筆紀錄產生一個按鈕
+        button_label = f"📄 {record['file_name']} \n({record['time']})"
+        if st.sidebar.button(button_label, key=record['id']):
+            # 當按下按鈕時，把該筆紀錄存入 session_state
+            st.session_state.selected_history = record['results']
+            st.session_state.current_viewing_file = record['file_name']
+
+# 如果使用者有點擊歷史紀錄，就在主畫面顯示出來，並提供一個「返回」按鈕
+if st.session_state.selected_history:
+    st.info(f"回顧模式：正在查看【{st.session_state.current_viewing_file}】的校對結果")
+    if st.button("⬅️ 返回新增校對"):
+        st.session_state.selected_history = None
+        st.rerun() # 重新載入畫面
+        
+    # 將歷史紀錄的結果渲染出來 (這裡請套用你原本顯示錯誤清單的邏輯)
+    for item in st.session_state.selected_history:
+        st.error(f"❌ 原文：{item.get('original', '')}")
+        st.warning(f"💡 問題：{item.get('issue', '')}")
+        st.success(f"✅ 建議：{item.get('fix', '')}")
+        st.markdown("---")
+        
+    st.stop() # 停止執行下方的上傳介面，保持在回顧模式
+
 
     try:
         model = genai.GenerativeModel(target_model)
@@ -209,6 +280,42 @@ def proofread_text(text, format_style):
 # --- 4. 介面與互動邏輯 ---
 st.title("📄 學術格式與錯字校對工具")
 st.markdown("上傳你的 Word, PDF 或 PPT，AI 將自動抓出格式瑕疵與錯字。")
+
+# --- 側邊欄：歷史紀錄區塊 ---
+st.sidebar.title("🗂️ 校對歷史紀錄")
+history_data = load_history()
+
+# 使用 Session State 來追蹤使用者目前想看哪一筆歷史紀錄
+if "selected_history" not in st.session_state:
+    st.session_state.selected_history = None
+
+if not history_data:
+    st.sidebar.info("目前還沒有任何校對紀錄。")
+else:
+    for record in history_data:
+        # 在側邊欄為每一筆紀錄產生一個按鈕
+        button_label = f"📄 {record['file_name']} \n({record['time']})"
+        if st.sidebar.button(button_label, key=record['id']):
+            # 當按下按鈕時，把該筆紀錄存入 session_state
+            st.session_state.selected_history = record['results']
+            st.session_state.current_viewing_file = record['file_name']
+
+# 如果使用者有點擊歷史紀錄，就在主畫面顯示出來，並提供一個「返回」按鈕
+if st.session_state.selected_history:
+    st.info(f"回顧模式：正在查看【{st.session_state.current_viewing_file}】的校對結果")
+    if st.button("⬅️ 返回新增校對"):
+        st.session_state.selected_history = None
+        st.rerun() # 重新載入畫面
+        
+    # 將歷史紀錄的結果渲染出來 (這裡請套用你原本顯示錯誤清單的邏輯)
+    for item in st.session_state.selected_history:
+        st.error(f"❌ 原文：{item.get('original', '')}")
+        st.warning(f"💡 問題：{item.get('issue', '')}")
+        st.success(f"✅ 建議：{item.get('fix', '')}")
+        st.markdown("---")
+        
+    st.stop() # 停止執行下方的上傳介面，保持在回顧模式
+
 
 st.sidebar.header("設定")
 format_choice = st.sidebar.selectbox(
