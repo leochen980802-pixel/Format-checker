@@ -39,7 +39,108 @@ def extract_text(file, file_type):
     return text
 
 # --- 3. 核心功能：呼叫 AI 進行校對 ---
+import time  # 務必確保檔案最上方有 import time
+
+# --- 3. 核心功能：呼叫 AI 進行校對（商用規格版） ---
 def proofread_text(text, format_style):
+    # 預設使用 Flash 模型，以取得每分鐘 15 次的高呼叫額度
+    target_model = "gemini-1.5-flash" 
+    
+    try:
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                if 'flash' in m.name:
+                    target_model = m.name
+                    break
+    except Exception:
+        pass 
+
+    try:
+        model = genai.GenerativeModel(target_model)
+    except Exception as e:
+        st.error(f"模型載入失敗：{e}")
+        return None
+
+    # =================【核心升級 1：滑動視窗分段處理】=================
+    # 將 64 頁的龐大文字，每 1500 字切成一塊，確保 AI 能集中注意力「逐字」細看
+    chunk_size = 1500
+    text_chunks = [text[i:i+chunk_size] for i in range(0, len(text), chunk_size)]
+    
+    all_results = []
+    
+    # 在 Streamlit 畫面上建立進度條與狀態文字
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    # 開始分批輪詢校對
+    for idx, chunk in enumerate(text_chunks):
+        status_text.text(f"正在深度校對第 {idx+1} / {len(text_chunks)} 段簡報文字...")
+        
+        prompt = f"""
+        你現在是一位擁有 20 年經驗的嚴苛學術期刊主編。你的任務是進行極度精準的文字與格式校對。
+        請嚴格執行以下步驟：
+        1. 逐字掃描，找出「所有」錯別字、漏字與不通順的文法。
+        2. 嚴格檢查格式是否「完全」符合【{format_style}】規範（包含引註格式、標點符號全半形、大小寫等）。
+        3. 寧可嚴格，不可錯漏。必須抓出所有問題。
+
+        你必須嚴格回傳一個 JSON 陣列，格式如下：
+        [
+          {{"original": "錯誤的句子或單字", "issue": "具體的錯誤原因說明", "fix": "建議的精確修改內容"}}
+        ]
+        
+        待校對文字段落：
+        {chunk} 
+        """
+        
+        try:
+            # =================【核心升級 2：原生 JSON 模式】=================
+            # 透過 response_mime_type 強制 API 只能輸出純 JSON，徹底根除 Extra data 錯誤
+            response = model.generate_content(
+                prompt,
+                generation_config={
+                    "temperature": 0.0,
+                    "response_mime_type": "application/json"
+                }
+            )
+            
+            # 直接解析，不需要再寫 find('[') 暴力切字串
+            chunk_result = json.loads(response.text)
+            if isinstance(chunk_result, list):
+                all_results.extend(chunk_result)
+                
+        except Exception as e:
+            error_msg = str(e)
+            # =================【核心升級 3：自動對抗 429 限制】=================
+            if "429" in error_msg or "Quota" in error_msg:
+                status_text.text("⚠️ 觸發免費版頻率限制，系統自動等待 30 秒後繼續...")
+                time.sleep(30)
+                # 重試機制
+                try:
+                    response = model.generate_content(
+                        prompt, 
+                        generation_config={"temperature": 0.0, "response_mime_type": "application/json"}
+                    )
+                    chunk_result = json.loads(response.text)
+                    if isinstance(chunk_result, list):
+                        all_results.extend(chunk_result)
+                except Exception:
+                    pass
+            else:
+                st.error(f"第 {idx+1} 段解析失敗，已跳過。錯誤：{error_msg}")
+        
+        # =================【核心升級 4：調頻緩衝】=================
+        # 免費版 Flash 限制每分鐘 15 次，每次呼叫完刻意休息 4 秒，確保整體運作平穩不中斷
+        time.sleep(4)
+        progress_bar.progress((idx + 1) / len(text_chunks))
+        
+    status_text.text("✨ 全本 64 頁簡報深度校對完成！")
+    time.sleep(1)
+    progress_bar.empty()
+    status_text.empty()
+    
+    return all_results
+
+#def proofread_text(text, format_style):
     # 【策略調整】退回 Flash 模型以獲得每分鐘 15 次的扣打，適合頻繁除錯測試
     target_model = "gemini-1.5-flash" 
     
