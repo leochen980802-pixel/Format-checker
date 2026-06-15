@@ -127,10 +127,9 @@ if st.session_state.selected_history:
 
 
     try:
-        model = genai.GenerativeModel(target_model)
+            model = genai.GenerativeModel(target_model)
     except Exception as e:
-        st.error(f"模型載入失敗：{e}")
-        return None
+            st.error(f"模型載入失敗：{e}")
 
     # =================【核心升級 1：滑動視窗分段處理】=================
     # 將 64 頁的龐大文字，每 1500 字切成一塊，確保 AI 能集中注意力「逐字」細看
