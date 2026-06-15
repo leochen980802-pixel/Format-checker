@@ -92,7 +92,7 @@ def extract_text_from_file(file):
 # ==========================================
 def proofread_text(text, format_style):
     # 💡 使用最通用的經典模型
-    target_model = "gemini-pro" 
+    target_model = "Gemini 2.5 Flash" 
     try:
         model = genai.GenerativeModel(target_model)
     except Exception as e:
